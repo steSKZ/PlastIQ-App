@@ -8,8 +8,8 @@ from itertools import chain
 # Initialize variables
 wertstoffscore = 0 # variable for the final score of the waste material
 percent_valuable_substance = 0.0 #set up variable for the amount of valuable substance in the waste
-waste_type = [] # list of waste types added during the input
-waste_share = [] # list of corresponding waste percentages added during the input
+material_type = [] # list of waste types added during the input
+material_share = [] # list of corresponding waste percentages added during the input
 
 # Parameters changing model
 set_threshold_assessibility = 0.8 # threshold for Step 2 regarding the assessibility of the recycling fraction
@@ -20,6 +20,7 @@ wt_electrostatic = 1 # weigth of sorting method "electrostatic", between 0 and 1
 
 # Default LCA data
 lca_declared_unit = 1 # Declared unit, usually 1 kg
+lca_emission_origen = "DE"
 
 lca_substitution_factor_plastics = 0.5 # substitution factor for avoided emissions for plastics # TODO 
 lca_substitution_factor_metal = 0.8 # substitution factor for avoided emissions for metal # TODO 
@@ -29,6 +30,8 @@ lca_substitution_factor_heat = 1 # substitution factor for avoided emissions for
 lca_distance_to_wte = 10 # Distance to waste-to-energy-plant in km TODO
 lca_distance_to_landfill = 10 # Distance from wte-plant to landfill in km TODO
 lca_distance_to_recycling_metal = 10 # Distance from wte-plant to recycling facility for metal in km TODO
+
+lca_vehicle_to_wte = "transport_lkw_22" # Chosen vehicle to transport materials to wte
 
 lca_efficiency_wte_electric = 0.113
 lca_efficiency_wte_heat = 0.33
@@ -77,6 +80,10 @@ material_frequency = st.session_state.key_dict_product_amount["input_haeufigkeit
 reach_conformity = st.session_state.key_dict_product_quality["input_wertstoff_reach"]
 # Get number of fractions
 material_fraction_number = st.session_state.key_dict_product["input_waste_fraction_number"]
+# Get material type and share of fraction to total material
+for k in range(material_fraction_number):
+    material_type.append(st.session_state.key_dict_product[f"input_wertstoff_typ_{k}"])
+    material_share.append(st.session_state.key_dict_product[f"input_wertstoff_anteil_{k}"])
 
 ## Get input data from files
 # Get list with all available materials and data on them
@@ -89,6 +96,8 @@ df_sort_eddycurrent = pd.read_excel(file_path_background, sheet_name = "sort_edd
 df_sort_density = pd.read_excel(file_path_background, sheet_name = "sort_density", index_col=0)
 # Elektrostatische Sortierung
 df_sort_electrostatic = pd.read_excel(file_path_background, sheet_name = "sort_electrostatic", index_col=0)
+# Get emission data
+df_lca_emission_data = pd.read_excel(file_path_background, sheet_name = "lca_calculation")
 
 ## Define functions - general
 # Function to locate WS to a class TODO Überprüfen auf notwendige Parameter, wo defaults gegeben werden können und wo hardcopy parameter ausreichen
@@ -113,8 +122,8 @@ def func_evaluateWS(wertstoffscore: float):
       ws_category = "Eingabe konnte nicht verarbeitet werden."
     return ws_category
 
-# Initialize dataframe for output scores
-def func_initializeOutputDf(count, waste_type):
+# Initialize dataframe for output scores TODO überprüfen
+def func_initializeOutputDf(count, material_type):
     # Loop through each entry and compare it with every other entry, while avoiding duplicates
     df_new = pd.DataFrame()
     
@@ -123,8 +132,8 @@ def func_initializeOutputDf(count, waste_type):
         for l in range(k+1, count):
             
             # Specify the row and column indices
-            first_material = waste_type[k]
-            second_material = waste_type[l]
+            first_material = material_type[k]
+            second_material = material_type[l]
 
             # Define material pairing
             pair_string = f"{first_material}_{second_material}"
@@ -136,30 +145,30 @@ def func_initializeOutputDf(count, waste_type):
     return df_new
 
 # Initialize dataframe for result 
-def func_initializeResultDf(label_columns: list, type: list, share: list, df_materials: pd.DataFrame):
+def func_initializeResultDf(amount: float = material_fraction_number, label_columns: list = columns_materials):
     
     # New dataframe with material as column name
-    df_new = pd.DataFrame(columns= label_columns)
+    df_new = pd.DataFrame(columns = label_columns)
     # Add first column "material type"
-    df_new[label_material_type] = type
+    df_new[label_material_type] = material_type
     # Lookup category of material
     material_category = []
 
-    for k in range(len(type)):
+    for k in range(amount):
         
         # lookup category from material dataframe
-        category = df_materials.loc[df_materials["abbreviation"].str.fullmatch(type[k], case=False, na=False), "category"]
+        category = df_materials.loc[df_materials["abbreviation"].str.fullmatch(material_type[k], case=False, na=False), "category"]
         material_category.append(category.iloc[0])
 
     # Add second column with material category
     df_new[label_material_category] = material_category
 
     # Add third column with material share
-    df_new[label_material_share] = share            
+    df_new[label_material_share] = material_share            
 
     return df_new
 
-# Function to check all available materials for their sorting options
+# Function to check all available materials for their sorting options TODO überprüfen
 def func_checkSorting(count, df_name):
     
     # Initialize list with all result values
@@ -170,8 +179,8 @@ def func_checkSorting(count, df_name):
         for l in range(k+1, count):
               
           # Specify the row and column indices
-          row_label = waste_type[k]
-          column_label = waste_type[l]
+          row_label = material_type[k]
+          column_label = material_type[l]
 
           # Get and return value at indices from matrix
           result = df_name.loc[row_label, column_label]
@@ -184,9 +193,9 @@ def func_checkSorting(count, df_name):
 
 ## Define functions - LCA
 # Get a specific emission factor from background_data
-def func_lca_get_emission_factor(df: pd.DataFrame, label_category: str, label_use: str):
+def func_lca_get_emission_factor(label_category: str, label_use: str) -> float:
     # Filter df by specific category
-    df_filtered = df[df["category"] == label_category]
+    df_filtered = df_lca_emission_data[df_lca_emission_data["category"] == label_category]
 
     # lookup emission factor specific to the label_use
     emission_factor = float(df_filtered.loc[df_filtered["use for"].str.contains(label_use, case=False, na=False), "GWP100"])
@@ -194,76 +203,82 @@ def func_lca_get_emission_factor(df: pd.DataFrame, label_category: str, label_us
     return emission_factor
 
 # Get emissions from transport
-def func_lca_emissions_transport(df: pd.DataFrame, label_use: str, distance: float, payload: float):
+def func_lca_emissions_transport(label_use: str, distance: float = 100.0, payload: float = 1.0) -> float:
     # get emission factor
-    emission_factor = func_lca_get_emission_factor(df, label_category="transport", label_use=label_use)
+    emission_factor = func_lca_get_emission_factor(label_category="transport", label_use=label_use)
     # calculate emissions with payload (in ton) * distance (in km) * emission factor (in kg CO2e/(t*km))
     emission_transport = payload * distance * emission_factor
     
     return emission_transport
 
 # get emissions from waste incineration
-def func_lca_emissions_incineration(fractions, df_emissions: pd.DataFrame, df_result: pd.DataFrame, df_materials: pd.DataFrame, weight: float):
+def func_lca_emissions_incineration(df: pd.DataFrame, weight: float) -> list:
     
     # Initialize values for resulting emissions, electric and heat energy
     emissions_incineration = 0 #in kg CO2e/kg waste
     electric_energy_incineration = 0 #in kWh 
     heat_energy_incineration = 0 #in kWh
-
-    # for every waste fraction
-    for k in range(fractions):
+    
+    # for every material fraction
+    for k in range(len(df[label_material_type].tolist())):
         
         # check if material is plastic (has heating value and emission) or metal (nor heating value nor emission)
-        material_category = df_result.at["category", df_result.columns[k]]
+        material_category = df.at[k, label_material_category]
         
-        if material_category == "plastic":
-            # get waste name and percentage from df_result in a list [name, percentage]
-            waste_data = [df_result.columns[k], df_result.at["share", df_result.columns[k]]]
-            st.write(waste_data)
-            # lookup name in df_emission, get emission_factor and add to list
-            emission_factor = func_lca_get_emission_factor(df_emissions, "incineration", waste_data[0])
+        #if material_category == "plastic": TODO rauslöschen, wenn nicht notwendig
+        # get material name and percentage from df_result in a list [name, percentage]
+        material_type = df.at[k, label_material_type]
+        material_share = float(df.at[k, label_material_share])
 
-            # lookup heating value from df_material
-            lower_heating_value = float(df_materials.loc[df_materials["abbreviation"].str.fullmatch(waste_data[0], case=False, na=False), "lower_heating_value_MJ_per_kg"])
+        # lookup name in df_emission, get emission_factor and add to list
+        emission_factor = func_lca_get_emission_factor("incineration", material_type)
 
-            # calculate electric and heat energy [kWh] from heating value [J/kg], weight [kg], material_share [-] and efficiency [-]
-            electric_energy_incineration += lower_heating_value * weight * waste_data[1]/100 * lca_efficiency_wte_electric / 3.6
-            heat_energy_incineration += lower_heating_value * weight * waste_data[1]/100 * lca_efficiency_wte_heat / 3.6
+        # lookup heating value from df_material
+        lower_heating_value = float(df_materials.loc[df_materials["abbreviation"].str.fullmatch(material_type, case=False, na=False), "lower_heating_value_MJ_per_kg"])
 
-            # add to exisiting emissions and energy
-            emissions_incineration += weight * waste_data[1]/100 * emission_factor
-            st.write(emissions_incineration)
-            st.write(electric_energy_incineration)
+        # calculate electric and heat energy [kWh] from heating value [J/kg], weight [kg], material_share [-] and efficiency [-]
+        electric_energy_incineration += lower_heating_value * weight * material_share/100 * lca_efficiency_wte_electric / 3.6
+        heat_energy_incineration += lower_heating_value * weight * material_share/100 * lca_efficiency_wte_heat / 3.6
+
+        # add to exisiting emissions and energy
+        emissions_incineration += weight * material_share/100 * emission_factor
+  
     return [emissions_incineration, [electric_energy_incineration, heat_energy_incineration]]
 
 # get emissions from process (categories: electricity, heat, ressources)
-def func_lca_emissions_process(df: pd.DataFrame, category: str, amount: float, origen: str, source: str):
+def func_lca_emissions_process(category: str, origen: str, source: str, amount: float = 1.0) -> float:
     # define label for emission factor search 
     label_use = f"{category}_{origen}_{source}"
     # look up emission factor
-    emission_factor = func_lca_get_emission_factor(df, label_category = category, label_use = label_use)
-    # calculate emission (kg CO2e/kWh) from electrical energy (in kWh) and emission factor
-    emission_process= amount * emission_factor
+    emission_factor = func_lca_get_emission_factor(label_category = category, label_use = label_use)
+    # calculate emission from process amount and emission factor
+    emission_process = amount * emission_factor
 
     return emission_process
 
 # get avoided emissions for secondary materials 1. plastic, 2. metal, depending on material in stream
-def func_lca_emissions_avoided_material(df_result: pd.DataFrame, df_emissions: pd.DataFrame, relevant_category: str):
+def func_lca_emissions_avoided_material(df: pd.DataFrame, relevant_category: str) -> float:
     
+    # initialize variable for avoided emissions
+    emission_avoided_material = 0
+
+    # filter dataframe for relevant category
+    df_filtered = df[df[label_material_category] == relevant_category]
+    
+    # sum of the share of relevant materials
+    category_share = float(sum(df_filtered[label_material_share].tolist()))
+
     # loop through every type of material
-    for k in df_result.shape[0]:
+    for k in df_filtered.shape[1]:
 
         # get material type, category and share from df_result
-        material_name = df_result.columns.tolist[k]
-        material_category = df_result.loc["category", material_name]
-        material_share = df_result.loc["share (%)", material_name]
-        
-        # Summe der material-Anteile der entsprechnedne Kategorie
-        category_share = float(df_result[df_result["category"] == relevant_category].loc["share (%)"].sum)
+        material_type = df_filtered.at[k, label_material_type]
+        material_share = df_filtered.at[k, label_material_share]
 
-        if material_category == relevant_category:
+        # calculate and add avoided emission of material
+        emission_avoided_material +=  (material_share/category_share) * func_lca_emissions_process(category=f"production-{relevant_category}", origen=lca_emission_origen, source=material_type)
 
-            emission_avoided_material =  (material_share/category_share) * func_lca_emissions_process()
+    return emission_avoided_material
 
 # calculate material weight per year in ton
 def func_lca_get_weigth_per_year(weight: float, frequency: str):
@@ -284,9 +299,13 @@ def func_lca_get_weigth_per_year(weight: float, frequency: str):
     return weight_per_year
 
 # function to calculate emissions for scenario: materials go to waste-to-energy-plant
-def func_lca_emissions_scenario_wte(df_result: pd.DataFrame, df_emissions: pd.DataFrame): 
+def func_lca_emissions_scenario_wte(df: pd.DataFrame, df_emission: pd.DataFrame) -> pd.DataFrame: 
+    
+    # determine the new index to add the scenario as new row to the emission dataframe
+    new_index = len(df)
+
     # 1.1. Transport to waste-to-energy(wte)-plant
-    emission_current_transport_wte = func_lca_emissions_transport(df_lca_emission_data, "transport_lkw_22", lca_distance_to_wte, lca_declared_unit)
+    df_emission.at[new_index, "transport_wte"] = func_lca_emissions_transport(lca_vehicle_to_wte, lca_distance_to_wte, lca_declared_unit)
 
     # 1.2. Incineration of waste in waste-to-energy(wte)-plant
     [emission_current_incineration, energy_current_incineration] = func_lca_emissions_incineration(material_fraction_number, df_lca_emission_data, df_result, df_materials, lca_declared_unit)
@@ -349,16 +368,12 @@ if reach_conformity == "Nein":
 # 2.1 Filter materials dataframe for recycling advancement
 df_materials_recyAdvance = df_materials[df_materials.recycling_advance > 0] #filter dataframe for all materials with the potential for recycling >0
 
-for k in range(material_fraction_number):
-    waste_type.append(st.session_state.key_dict_product[f"input_wertstoff_typ_{k}"])
-    waste_share.append(st.session_state.key_dict_product[f"input_wertstoff_anteil_{k}"])
-
 # 2.2 Adding up all
 for k in range(material_fraction_number):
-  # Check if the kth entry of waste_type is in a list of materials of dataframe
-    if waste_type[k] in df_materials_recyAdvance.abbreviation.tolist():
-        # Add the kth value of waste_share to percent_valuable_substance
-        percent_valuable_substance += waste_share[k]/100
+  # Check if the kth entry of material_type is in a list of materials of dataframe
+    if material_type[k] in df_materials_recyAdvance.abbreviation.tolist():
+        # Add the kth value of material_share to percent_valuable_substance
+        percent_valuable_substance += material_share[k]/100
 
 if percent_valuable_substance < set_threshold_assessibility:
     wertstoffscore = 0
@@ -366,14 +381,14 @@ if percent_valuable_substance < set_threshold_assessibility:
 
 # Step 3: Check if possible to sort fractions by different methods
 # Initialize dataframes for output scores (1. for sorting, 2. for final results)
-df_result = func_initializeResultDf(columns_materials, waste_type, waste_share, df_materials)
+df_result = func_initializeResultDf(columns_materials, material_type, material_share, df_materials)
 
 # if waste consists only of one fraction, no sorting is necessary
 if material_fraction_number == 1: 
     wertstoffscore = 89 #Einteilung als Recyling, werkstofflich, sortenrein
     ws_category = func_evaluateWS(wertstoffscore)
 
-    # res_sort = 1
+    # result_sorting in Dataframe = 1
     df_result.at[0, label_material_result_sorting] = 1
 
 # if waste consists of more than 1 fraction, sorting is necessary
@@ -385,7 +400,7 @@ elif material_fraction_number > 1 and material_fraction_number <= 5:
     list_sort_weight = [wt_ferromagnetic, wt_eddycurrent, wt_density, wt_electrostatic]
 
     # Initialize dataframes for output scores (1. for sorting)
-    df_result_sorting = func_initializeOutputDf(material_fraction_number, waste_type)
+    df_result_sorting = func_initializeOutputDf(material_fraction_number, material_type)
 
     # loop through each sorting method and obtain values for all material pairing
     for k in range(len(list_df_sort)):
@@ -403,7 +418,7 @@ elif material_fraction_number > 1 and material_fraction_number <= 5:
     for k in range(material_fraction_number):
 
         # Get material string 
-        material_name = waste_type[k]
+        material_name = material_type[k]
         # Check which column contains material name
         matching_col_indices = [i for i, col in enumerate(df_result_sorting.columns) if material_name in col]
         # Check if all relevant columns for a material contain at least a 1
@@ -443,9 +458,6 @@ st.write(df_result) #TODO
 lca_distance_to_recycler = 10 #TODO WeSort: Hier mit dem Ausgabewert für die Distance ersetzen.
 
 ## life cycle analysis (lca) and comparison of current and proposed waste treatment
-# Get emission data
-df_lca_emission_data = pd.read_excel(file_path_background, sheet_name = "lca_calculation")
-
 
 # 1. lca of current waste treatment (waste incineration) for 1kg of waste
 # 1.1. Transport to waste-to-energy(wte)-plant
