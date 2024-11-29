@@ -48,6 +48,25 @@ lca_energy_use_sorting_mixed = 0.3 # electricity use for sorting mixed materials
 file_path_background = "content/background_data_decision_tree.xlsx"
 file_path_input = "content/plastiq_input_information.xlsx"
 
+# Define labels for different dataframes
+# for dataframe materials
+label_material_type = "type"
+label_material_category = "category"
+label_material_share = "share"
+label_material_result_sorting = "result_sorting"
+columns_materials = [label_material_type, label_material_category, label_material_share, label_material_result_sorting]
+# for dataframe of sorting results:
+columns_sorting = []
+# for dataframe emissions
+columns_emissions = [
+    "processing_total",
+    "processing_plastic_total", "processing_plastic_sorting", "processing_plastic_shredding", "processing_plastic_cleaning", "processing_plastic_drying", "processing_plastic_regranulation", 
+    "processing_metal_total", "processing_metal_sorting", "processing_metal_shredding", "processing_metal_cleaning", "processing_metal_melting",
+    "endoflife_total", "endoflife_incineration", "endoflife_landfill",
+    "transport_total", "transport_recycler_plastic", "transport_recycler_metal", "transport_wte", "transport_landfill",
+    "avoided_total", "avoided_electricity", "avoided_heat", "avoided_plastic", "avoided_metal"
+]   
+
 ## Define functions - general
 # Function to locate WS to a class
 def func_evaluateWS(wertstoffscore: float):
@@ -70,6 +89,7 @@ def func_evaluateWS(wertstoffscore: float):
     else: #Fehlerhafte Eingabe
       ws_category = "Eingabe konnte nicht verarbeitet werden."
     return ws_category
+
 
 # Initialize dataframe for output scores
 def func_initializeOutputDf(count, waste_type):
@@ -94,28 +114,28 @@ def func_initializeOutputDf(count, waste_type):
     return df_new
 
 # Initialize dataframe for result 
-def func_initializeResultDf(count: float, type: list, share: list, df_materials: pd.DataFrame):
+def func_initializeResultDf(label_columns: list, type: list, share: list, df_materials: pd.DataFrame):
     
     # New dataframe with material as column name
-    df_new = pd.DataFrame(columns=type)
-
+    df_new = pd.DataFrame(columns= label_columns)
+    # Add first column "material type"
+    df_new[label_material_type] = type
     # Lookup category of material
     material_category = []
 
-    for k in range(count):
+    for k in range(len(type)):
         
         # lookup category from material dataframe
         category = df_materials.loc[df_materials["abbreviation"].str.fullmatch(type[k], case=False, na=False), "category"]
         material_category.append(category.iloc[0])
 
-    # Add first row with material category
-    df_new.loc["category"] = material_category
+    # Add second column with material category
+    df_new[label_material_category] = material_category
 
-    # Add second row with material share
-    df_new.loc["share (%)"] = share            
+    # Add third column with material share
+    df_new[label_material_share] = share            
 
     return df_new
-
 
 # Function to check all available materials for their sorting options
 def func_checkSorting(count, df_name):
@@ -300,7 +320,7 @@ elif waste_fractions_number > 1 and waste_fractions_number <= 5:
 
     # Initialize dataframes for output scores (1. for sorting, 2. for final results)
     df_result_sorting = func_initializeOutputDf(waste_fractions_number, waste_type)
-    df_result = func_initializeResultDf(waste_fractions_number, waste_type, waste_share, df_materials)
+    df_result = func_initializeResultDf(columns_materials, waste_type, waste_share, df_materials)
 
     # loop through each sorting method and obtain values for all material pairing
     for k in range(len(list_df_sort)):
@@ -315,7 +335,7 @@ elif waste_fractions_number > 1 and waste_fractions_number <= 5:
     df_result_sorting.index = list_df_sort_name
 
     # add row for final sorting results to result dataframe
-    df_result.loc["res_sort"] = [np.nan] * waste_fractions_number
+    #df_result[label_material_result_sorting] = [np.nan] * waste_fractions_number
 
     # Check if one material can be sorted completly from any other (= 1, sortenrein)
     for k in range(waste_fractions_number):
