@@ -2,7 +2,6 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
-import sys  
 from itertools import chain
 
 ## Define variables
@@ -34,11 +33,16 @@ lca_distance_to_recycling_metal = 10 # Distance from wte-plant to recycling faci
 lca_efficiency_wte_electric = 0.113
 lca_efficiency_wte_heat = 0.33
 
-lca_energy_use_sorting_metal = 0.3 # energy use for sorting metal per kg, in kWh TODO
-lca_energy_use_shredding_metal = 0.3 # energy use for shredding metal per kg, in kWh TODO
-lca_energy_use_cleaning_metal = 0.3 # energy use for cleaning metal per kg, in kWh TODO
-lca_energy_use_melting_metal = 1 # energy use for melting metal per kg, in kWh TODO
-lca_energy_use_sorting_mixed = 0.3 # energy use for sorting mixed materials per kg in kWh TODO
+lca_electricity_use_sorting_metal = 0.3 # electricity use for sorting metal per kg, in kWh TODO
+lca_electricity_use_shredding_metal = 0.3 # electricity use for shredding metal per kg, in kWh TODO
+lca_electricity_use_cleaning_metal = 0.3 # electricity use for cleaning metal per kg, in kWh TODO
+lca_electricity_use_melting_metal = 1 # electricity use for melting metal per kg, in kWh TODO
+lca_heat_use_cleaning_metal = 1 # heat energy use for cleaning metal per kg, in kWh TODO
+lca_water_use_cleaning_metal = 1 # water use for cleaning metal per kg in kg Water TODO
+lca_wastewater_use_cleaning_metal = 1 # wastewater for cleaning metal per kg in kg wastewater TODO
+lca_solvent_use_cleaning_metal = 1 # solvent use for clening metal per kg in kg solvent TODO
+
+lca_energy_use_sorting_mixed = 0.3 # electricity use for sorting mixed materials per kg in kWh TODO
 
 # file paths
 file_path_background = "content/background_data_decision_tree.xlsx"
@@ -101,13 +105,14 @@ def func_initializeResultDf(count: float, type: list, share: list, df_materials:
     for k in range(count):
         
         # lookup category from material dataframe
-        material_category.append(df_materials.loc[df_materials["abbreviation"].str.fullmatch(type[k], case=False, na=False), "category"])
+        category = df_materials.loc[df_materials["abbreviation"].str.fullmatch(type[k], case=False, na=False), "category"]
+        material_category.append(category.iloc[0])
 
     # Add first row with material category
     df_new.loc["category"] = material_category
 
     # Add second row with material share
-    df_new.loc["share"] = share            
+    df_new.loc["share (%)"] = share            
 
     return df_new
 
@@ -140,6 +145,7 @@ def func_checkSorting(count, df_name):
 def func_lca_get_emission_factor(df: pd.DataFrame, label_category: str, label_use: str):
     # Filter df by specific category
     df_filtered = df[df["category"] == label_category]
+
     # lookup emission factor specific to the label_use
     emission_factor = float(df_filtered.loc[df_filtered["use for"].str.contains(label_use, case=False, na=False), "GWP100"])
 
@@ -165,22 +171,27 @@ def func_lca_emissions_incineration(fractions, df_emissions: pd.DataFrame, df_re
     # for every waste fraction
     for k in range(fractions):
         
-        # get waste name and percentage from df_result in a list [name, percentage]
-        waste_data = [df_result.columns[k], df_result.iloc[0, k]]
+        # check if material is plastic (has heating value and emission) or metal (nor heating value nor emission)
+        material_category = df_result.at["category", df_result.columns[k]]
+        
+        if material_category == "plastic":
+            # get waste name and percentage from df_result in a list [name, percentage]
+            waste_data = [df_result.columns[k], df_result.at["share", df_result.columns[k]]]
+            st.write(waste_data)
+            # lookup name in df_emission, get emission_factor and add to list
+            emission_factor = func_lca_get_emission_factor(df_emissions, "incineration", waste_data[0])
 
-        # lookup name in df_emission, get emission_factor and add to list
-        emission_factor = func_lca_get_emission_factor(df_emissions, "incineration", waste_data[0])
+            # lookup heating value from df_material
+            lower_heating_value = float(df_materials.loc[df_materials["abbreviation"].str.fullmatch(waste_data[0], case=False, na=False), "lower_heating_value_MJ_per_kg"])
 
-        # lookup heating value from df_material
-        lower_heating_value = float(df_materials.loc[df_materials["abbreviation"].str.fullmatch(waste_data[0], case=False, na=False), "lower_heating_value_MJ_per_kg"])
+            # calculate electric and heat energy [kWh] from heating value [J/kg], weight [kg], material_share [-] and efficiency [-]
+            electric_energy_incineration += lower_heating_value * weight * waste_data[1]/100 * lca_efficiency_wte_electric / 3.6
+            heat_energy_incineration += lower_heating_value * weight * waste_data[1]/100 * lca_efficiency_wte_heat / 3.6
 
-        # calculate electric and heat energy [kWh] from heating value [J/kg], weight [kg], material_share [-] and efficiency [-]
-        electric_energy_incineration += lower_heating_value * weight * waste_data[1]/100 * lca_efficiency_wte_electric / 3.6
-        heat_energy_incineration += lower_heating_value * weight * waste_data[1]/100 * lca_efficiency_wte_heat / 3.6
-
-        # add to exisiting emissions and energy
-        emissions_incineration += weight * waste_data[1]/100 * emission_factor
-
+            # add to exisiting emissions and energy
+            emissions_incineration += weight * waste_data[1]/100 * emission_factor
+            st.write(emissions_incineration)
+            st.write(electric_energy_incineration)
     return [emissions_incineration, [electric_energy_incineration, heat_energy_incineration]]
 
 # get emissions from process (categories: electricity, heat, ressources)
@@ -193,6 +204,26 @@ def func_lca_emissions_process(df: pd.DataFrame, category: str, amount: float, o
     emission_process= amount * emission_factor
 
     return emission_process
+
+# get avoided emissions for secondary materials 1. plastic, 2. metal, depending on material in stream
+def func_lca_emission_avoided_material(df_result: pd.DataFrame, df_emissions: pd.DataFrame, relevant_category: str):
+    
+    # loop through every type of material
+    for k in df_result.shape[0]:
+
+        # get material type, category and share from df_result
+        material_name = df_result.columns.tolist[k]
+        material_category = df_result.loc["category", material_name]
+        material_share = df_result.loc["share (%)", material_name]
+        
+        # Summe der material-Anteile der entsprechnedne Kategorie
+        category_share = float(df_result[df_result["category"] == relevant_category].loc["share (%)"].sum)
+
+        if material_category == relevant_category:
+
+            emission_avoided_material =  (material_share/category_share) * func_lca_emissions_process()
+
+
 
 # calculate material weight per year in ton
 def func_lca_get_weigth_per_year(weight: float, frequency: str):
@@ -269,7 +300,7 @@ elif waste_fractions_number > 1 and waste_fractions_number <= 5:
 
     # Initialize dataframes for output scores (1. for sorting, 2. for final results)
     df_result_sorting = func_initializeOutputDf(waste_fractions_number, waste_type)
-    df_result = pd.DataFrame([waste_share], columns=waste_type, index=["waste_share [%]"])
+    df_result = func_initializeResultDf(waste_fractions_number, waste_type, waste_share, df_materials)
 
     # loop through each sorting method and obtain values for all material pairing
     for k in range(len(list_df_sort)):
@@ -304,7 +335,7 @@ elif waste_fractions_number > 1 and waste_fractions_number <= 5:
         # if the material can be sorted from other materials: 
         if all(list_check_clear_sort) == True:
             # res_sort = 1
-            df_result.iloc[1, k] = 1
+            df_result.at["res_sort", material_name] = 1
 
         # if the material can NOT be sorted completly from other materials:  
         elif all(list_check_clear_sort) == False:
@@ -318,14 +349,14 @@ elif waste_fractions_number > 1 and waste_fractions_number <= 5:
                     # multiply each value with the corresponding weight
                     weighted_values_to_average = [a * b for a, b in zip(values_to_average, list_sort_weight)]
                     # calculate mean and store in result dataframe
-                    df_result.iloc[1, k] = sum(weighted_values_to_average) / len(weighted_values_to_average)
+                    df_result.at["res_sort", material_name] = sum(weighted_values_to_average) / len(weighted_values_to_average)
 
 st.write(df_result) #TODO
 
 ## get location data from Recycler #TODO WeSort: Hier den Algorithmus zur Verknüpfung mit dem Recycler einfügen. 
 # Habe bereits die ermittelten Daten zu Längen- und Breitengrad des Abfallursprungs als list bereitgestellt. 
 # Als Output sollte u.a. die Transportdistanz vom Unternehmen zum Recycler (lca_distance_to_recycler) angegeben werden. Diese wird unten für die life cycle analysis benötigt.
-company_coordinates = st.session_state.coordinates_data
+#company_coordinates = st.session_state.coordinates_data
 
 lca_distance_to_recycler = 10 #TODO WeSort: Hier mit dem Ausgabewert für die Distance ersetzen.
 
@@ -360,15 +391,15 @@ emission_current_dross_landfill = dross_share * func_lca_get_emission_factor(df_
 emission_current_transport_metal = metal_share * func_lca_emissions_transport(df_lca_emission_data, "transport_lkw_22", lca_distance_to_recycling_metal, lca_declared_unit)
 
 # 1.5.2. Sorting, shredding and cleaning of metals at recycling plant
-emsission_current_sorting_metal = metal_share * func_lca_emissions_process(df_lca_emission_data, "electricity", lca_energy_use_sorting_metal, "DE", "mix")
-emission_current_shredding_metal = metal_share * func_lca_emissions_process(df_lca_emission_data, "electricity", lca_energy_use_shredding_metal, "DE", "mix")
-emission_current_cleaning_metal = metal_share * sum(
-    func_lca_emissions_process(df_lca_emission_data, "electricity", lca_energy_use_shredding_metal, "DE", "mix"), 
-    func_lca_emissions_process(df_lca_emission_data, "heat", lca_energy_use_shredding_metal, "DE", "mix"),
-    func_lca_emissions_process(df_lca_emission_data, "water", lca_energy_use_shredding_metal, "DE", "mix"),
-    func_lca_emissions_process(df_lca_emission_data, "wastewater", lca_energy_use_shredding_metal, "DE", "mix"),
-    func_lca_emissions_process(df_lca_emission_data, "ressource", lca_energy_use_shredding_metal, "DE", "mix")
-)
+emsission_current_sorting_metal = metal_share * func_lca_emissions_process(df_lca_emission_data, "electricity", lca_electricity_use_sorting_metal, "DE", "mix")
+emission_current_shredding_metal = metal_share * func_lca_emissions_process(df_lca_emission_data, "electricity", lca_electricity_use_shredding_metal, "DE", "mix")
+emission_current_cleaning_metal = metal_share * sum([
+    func_lca_emissions_process(df_lca_emission_data, "electricity", lca_electricity_use_cleaning_metal, "DE", "mix"), 
+    func_lca_emissions_process(df_lca_emission_data, "heat", lca_heat_use_cleaning_metal, "DE", "mix"),
+    func_lca_emissions_process(df_lca_emission_data, "water", lca_water_use_cleaning_metal, "EU", "groundwater"),
+    func_lca_emissions_process(df_lca_emission_data, "wastewater", lca_wastewater_use_cleaning_metal, "DE", "default"),
+    func_lca_emissions_process(df_lca_emission_data, "ressource", lca_solvent_use_cleaning_metal, "DE", "cleaning_agent")
+])
 
 # 1.5.3. Melting down metals (depending on metal)
 emissions_current_melting_metal = metal_share * 0 # TODO
@@ -377,7 +408,7 @@ emissions_current_melting_metal = metal_share * 0 # TODO
 #  Secondary Material (metal)
 emission_current_avoided_electricity = lca_substitution_factor_electricity * -func_lca_emissions_process(df_lca_emission_data, "electricity", energy_current_incineration[0], "DE", "mix")
 emission_current_avoided_heat = lca_substitution_factor_heat * -func_lca_emissions_process(df_lca_emission_data, "heat", energy_current_incineration[1], "DE", "mix")
-emission_current_avoided_secondary_metal = lca_substitution_factor_metal * -func_lca_emissions_process(df_lca_emission_data, "production - metal", energy_current_incineration[1], "DE", "mix")
+emission_current_avoided_secondary_metal = lca_substitution_factor_metal * -func_lca_emissions_process(df_lca_emission_data, "production-metal", energy_current_incineration[1], "DE", "mix") # TODO depending on metal
 
 # Group emissions by category
 emission_cat_current_transport = [emission_current_transport_wte, emission_current_transport_landfill, emission_current_transport_metal]
@@ -400,7 +431,7 @@ emission_future_sorting = func_lca_emissions_process(df_lca_emission_data, "elec
 
 share_material_plastics = 0.8 # TODO
 share_material_metal = 0.2 # TODO
-share_material_nonrecycable = 0
+share_material_nonrecycable = 0.1
 
 # 2.2.2 Recycling of plastics (shredding, cleaning, drying, regranulation)
 emission_future_shredding_plastic = share_material_plastics * 0 # TODO
@@ -412,14 +443,14 @@ emissin_future_regranulation_plastic = share_material_plastics * 0 # TODO
 # 2.2.3. Recycling of metal (transport, shredding, cleaning, melting)
 emission_future_transport_metal = share_material_metal * func_lca_emissions_transport(df_lca_emission_data, "transport_lkw_22", lca_distance_to_recycling_metal, lca_declared_unit)
 
-emission_future_shredding_metal = share_material_metal * func_lca_emissions_process(df_lca_emission_data, "electricity", lca_energy_use_shredding_metal, "DE", "mix")
-emission_furture_cleaning_metal = share_material_metal * sum(
-    func_lca_emissions_process(df_lca_emission_data, "electricity", lca_energy_use_shredding_metal, "DE", "mix"), 
-    func_lca_emissions_process(df_lca_emission_data, "heat", lca_energy_use_shredding_metal, "DE", "mix"),
-    func_lca_emissions_process(df_lca_emission_data, "water", lca_energy_use_shredding_metal, "DE", "mix"),
-    func_lca_emissions_process(df_lca_emission_data, "wastewater", lca_energy_use_shredding_metal, "DE", "mix"),
-    func_lca_emissions_process(df_lca_emission_data, "ressource", lca_energy_use_shredding_metal, "DE", "mix")
-)
+emission_future_shredding_metal = share_material_metal * func_lca_emissions_process(df_lca_emission_data, "electricity", lca_electricity_use_shredding_metal, "DE", "mix")
+emission_furture_cleaning_metal = share_material_metal * sum([
+    func_lca_emissions_process(df_lca_emission_data, "electricity", lca_electricity_use_shredding_metal, "DE", "mix"), 
+    func_lca_emissions_process(df_lca_emission_data, "heat", lca_electricity_use_shredding_metal, "DE", "mix"),
+    func_lca_emissions_process(df_lca_emission_data, "water", lca_electricity_use_shredding_metal, "DE", "mix"),
+    func_lca_emissions_process(df_lca_emission_data, "wastewater", lca_electricity_use_shredding_metal, "DE", "mix"),
+    func_lca_emissions_process(df_lca_emission_data, "ressource", lca_electricity_use_shredding_metal, "DE", "mix")
+])
 emissions_future_melting_metal = share_material_metal * 0 # TODO
 
 # 2.3. Incineration of non-recycable materials
@@ -428,6 +459,8 @@ emission_future_transport_wte = share_material_nonrecycable * func_lca_emissions
 
 # 2.3.2. Incineration of non-recycable plastics in waste-to-energy-plant
 [emission_future_incineration, energy_future_incineration] = share_material_nonrecycable * func_lca_emissions_incineration(waste_fractions_number, df_lca_emission_data, df_result, df_materials, lca_declared_unit) # TODO change df_results to only include plastic materials (non-recycables)
+st.write([emission_future_incineration, energy_future_incineration])
+
 dross_share_future = share_material_nonrecycable * dross_share # share for the remaining dross compared to 1 kg waste
 
 # 2.3.3 Transport of dross to landfill + enmissions from landfill
