@@ -1,5 +1,8 @@
 import streamlit as st
 
+# Set page configuration
+st.set_page_config(page_title="PlastIQ - Result Page", layout="wide")
+
 page_input_contact = st.Page("subpages/input/contact.py", title="Kontakt", icon=":material/contacts:")
 page_input_company = st.Page("subpages/input/company.py", title="Unternehmen", icon=":material/apartment:")
 page_input_product = st.Page("subpages/input/product.py", title="Zusammensetzung", icon=":material/add_circle:")
@@ -8,14 +11,13 @@ page_input_pr_quality = st.Page("subpages/input/product_quality.py", title="Qual
 page_input_pr_quality_additive = st.Page("subpages/input/product_quality_additive.py", title="Qualität – Zusätze", icon=":material/add_circle:")
 page_input_pr_further = st.Page("subpages/input/product_further.py", title="Weitere Angaben", icon=":material/add_circle:")
 page_output_score = st.Page("subpages/output/score.py", title="Passende Verwertung", icon=":material/all_match:")
-page_output_recyler = st.Page("subpages/output/recycler.py", title="Passende Abnehmer", icon=":material/pin_drop:")
 
 
 pg = st.navigation(
     {
         "Datenaufnahme - Kontakt": [page_input_contact, page_input_company],
         "Datenaufnahme - Wertstoff": [page_input_product, page_input_pr_origin, page_input_pr_quality, page_input_pr_quality_additive, page_input_pr_further],
-        "Ergebnisse": [page_output_score, page_output_recyler],
+        "Ergebnisse": [page_output_score],
     }
 )
 

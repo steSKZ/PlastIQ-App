@@ -127,16 +127,13 @@ def collect_company():
 
             # If conversion from address data to coordinates was successful
             if latitude and longitude:
-                st.success(f"Koordinaten: {latitude}, {longitude}")
-        
+       
                 # Create a dataframe with the coordinates for st.map
                 st.session_state.coordinates_data = {
                     'latitude': [latitude],
                     'longitude': [longitude]
                 }
                 
-                # Display the map with the coordinates
-                #st.map(pd.DataFrame(coordinates_data))
             else:
                 st.session_state.coordinates_data = {
                     'latitude': "",
@@ -159,6 +156,10 @@ def collect_company():
             }
 
             company_df = pd.DataFrame(company_data|st.session_state.coordinates_data)
+
+            # Show success message with a green checkmark
+            st.success("✅ Die Angaben wurden erfolgreich übernommen!")
+
             return company_df
     return None
 
@@ -228,7 +229,7 @@ if company_df is not None:
 
     # Append the DataFrame to the existing Excel file
     append_df_to_excel(file_path, company_df)
-    show_dataframe (df_header, company_df)
+    #show_dataframe (df_header, company_df)
 
 # Display buttons to switch between input pages
 left_column_bottom, right_column_bottom = st.columns([.13,1])

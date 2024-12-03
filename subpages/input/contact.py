@@ -43,6 +43,10 @@ def collect_contact():
             }
 
             contact_df = pd.DataFrame(contact_data)
+
+            # Show success message with a green checkmark
+            st.success("✅ Die Angaben wurden erfolgreich übernommen!")
+            
             return contact_df
     return None
 
@@ -101,7 +105,7 @@ contact_df = collect_contact()
 if contact_df is not None:
     # Append the DataFrame to the existing Excel file
     append_df_to_excel(file_path, contact_df)
-    show_dataframe (df_header, contact_df)
+    #show_dataframe (df_header, contact_df)
 
 # Display buttons to switch between input pages
 button_next = st.button("Weiter")

@@ -51,6 +51,10 @@ def collect_product_amount():
             }
 
             product_df = pd.DataFrame(product_amount)
+
+            # Show success message with a green checkmark
+            st.success("✅ Die Angaben wurden erfolgreich übernommen!")
+
             return product_df
     return None
 
@@ -104,7 +108,7 @@ if product_df is not None:
 
     # Append the DataFrame to the existing Excel file
     append_df_to_excel(file_path, product_df)
-    show_dataframe (df_header, product_df)
+    #show_dataframe (df_header, product_df)
 
 # Display buttons to switch between input pages
 left_column_bottom, right_column_bottom = st.columns([.13,1])
