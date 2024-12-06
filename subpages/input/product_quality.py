@@ -8,7 +8,7 @@ import datetime
 file_path = "content/plastiq_input_information.xlsx"
 df_header = "Wertstoffqualität"
 
-wertstoff_colour_list = ["blau", "braun", "bunt", "divers", "gelb", "grau", "grün", "natur", "rot", "schwarz"]
+wertstoff_colour_list = ["blau", "braun", "bunt", "divers", "gelb", "grau", "grün", "natur", "rot", "schwarz", "weiß"]
 wertstoff_contaminants_list = ["keine", "gering", "mittel", "hoch", "sehr hoch"]
 additiv_typ_list = [ # list with all common additives
     "Antibeschlagmittel", "Antioxidant", "Antistatika", "Biozide", "Chemische Treibmittel",

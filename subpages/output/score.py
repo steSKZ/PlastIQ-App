@@ -15,6 +15,7 @@ wt_ferromagnetic = 1 # weigth of sorting method "ferromagnetic", between 0 and 1
 wt_eddycurrent = 1 # weigth of sorting method "eddycurrent", between 0 and 1
 wt_density = 1 # weigth of sorting method "density", between 0 and 1
 wt_electrostatic = 1 # weigth of sorting method "electrostatic", between 0 and 1
+wt_sensorbased = 1 # weigth of sorting method "sensorbased", between 0 and 1
 
 # Default LCA data TODO change to tuple
 lca_declared_unit = 1 # Declared unit, usually 1 kg
@@ -71,8 +72,16 @@ label_material_category = "category"
 label_material_share = "share"
 label_material_result_sorting = "result_sorting"
 columns_materials = [label_material_type, label_material_category, label_material_share, label_material_result_sorting]
+
 # for dataframe of sorting results:
-columns_sorting = []
+label_material_pairing = "material_pairing"
+label_sort_ferromagnetic = "sort_ferromagnetic"
+label_sort_eddycurrent = "sort_eddycurrent"
+label_sort_density = "sort_density"
+label_sort_electrostatic = "sort_electrostatic"
+label_sort_sensorbased = "sort_sensorbased"
+columns_sorting = [label_material_pairing, label_sort_ferromagnetic, label_sort_eddycurrent, label_sort_density, label_sort_electrostatic, label_sort_sensorbased]
+
 # for dataframe emissions
 columns_emissions = [
     "emissions_overall_per_year", "emissions_overall_per_weight", "emissions_overall_per_declared_unit",
@@ -109,6 +118,8 @@ df_sort_eddycurrent = pd.read_excel(file_path_background, sheet_name = "sort_edd
 df_sort_density = pd.read_excel(file_path_background, sheet_name = "sort_density", index_col=0)
 # Elektrostatische Sortierung
 df_sort_electrostatic = pd.read_excel(file_path_background, sheet_name = "sort_electrostatic", index_col=0)
+# Sensorbased Sorting 
+df_sort_sensorbased = pd.read_excel(file_path_background, sheet_name = "sort_sensorbased", index_col=0)
 # Get emission data
 df_lca_emission_data = pd.read_excel(file_path_background, sheet_name = "lca_calculation")
 
@@ -142,14 +153,15 @@ def func_evaluateWS(wertstoffscore: float):
       ws_category = "Eingabe konnte nicht verarbeitet werden."
     return ws_category, ws_sentence
 
-# Initialize dataframe for output scores TODO überprüfen
-def func_initializeOutputDf(count, material_type):
+# Initialize dataframe for sorting output scores
+def func_initializeOutputDf(amount: float = material_fraction_number, label_columns: list = columns_sorting) -> pd.DataFrame:
+    df_new = pd.DataFrame(columns=label_columns)
+    list_material_pairing = []
+
     # Loop through each entry and compare it with every other entry, while avoiding duplicates
-    df_new = pd.DataFrame()
-    
-    # Add column for each material pairing
-    for k in range(count):
-        for l in range(k+1, count):
+    # Add row for each material pairing
+    for k in range(amount):
+        for l in range(k+1, amount):
             
             # Specify the row and column indices
             first_material = material_type[k]
@@ -158,14 +170,17 @@ def func_initializeOutputDf(count, material_type):
             # Define material pairing
             pair_string = f"{first_material}_{second_material}"
 
-            # Add to dataframe
-            df_new[pair_string] = []
+            # Add to list
+            list_material_pairing.append(pair_string)
+
+    # Add list to dataframe
+    df_new[label_material_pairing] = list_material_pairing
 
     # Output new dataframe
     return df_new
 
 # Initialize dataframe for result 
-def func_initializeResultDf(amount: float = material_fraction_number, label_columns: list = columns_materials):
+def func_initializeResultDf(amount: float = material_fraction_number, label_columns: list = columns_materials) -> pd.DataFrame:
     
     # New dataframe with material as column name
     df_new = pd.DataFrame(columns = label_columns)
@@ -188,22 +203,37 @@ def func_initializeResultDf(amount: float = material_fraction_number, label_colu
 
     return df_new
 
-# Function to check all available materials for their sorting options TODO überprüfen
-def func_checkSorting(count, df_name):
+def func_get_indices_for_material(df: pd.DataFrame, column: str, material: str) -> list:
+    """
+    Get the indices of rows where a specific material is present in a specified column.
+
+    Parameters:
+        df (pd.DataFrame): The DataFrame to search.
+        column (str): The column name to search in.
+        material (str): The material to look for.
+
+    Returns:
+        list: A list of row indices where the material is present.
+    """
+    indices = df[df[column].str.contains(material, case=False, na=False)].index
+    return indices.tolist()
+
+# Function to check all available materials for their sorting options
+def func_checkSorting(df: pd.DataFrame, amount: float = material_fraction_number) -> list:
     
     # Initialize list with all result values
     values_sort = []
 
     # Loop through each entry and compare it with every other entry, while avoiding duplicates
-    for k in range(count):
-        for l in range(k+1, count):
+    for k in range(amount):
+        for l in range(k+1, amount):
               
           # Specify the row and column indices
           row_label = material_type[k]
           column_label = material_type[l]
 
           # Get and return value at indices from matrix
-          result = df_name.loc[row_label, column_label]
+          result = df.loc[row_label, column_label]
 
           # Add to list
           values_sort.append(float(result))
@@ -582,7 +612,7 @@ def func_lca_emissions_scenario_recycling(df: pd.DataFrame, df_emission: pd.Data
     df_emission.at[new_index, "processing_plastic_drying"] = share_plastic * func_lca_emissions_processes_plastic(process="drying", df=df_result)
     df_emission.at[new_index, "processing_plastic_regranulation"] = share_plastic * func_lca_emissions_processes_plastic(process="regranulation", df=df_result)
     share_plastic *= lca_share_io_regranulation
-    share_nonrecycable = share_nonrecycable + share_plastic_init * (1 - lca_share_io_overall)
+    share_nonrecycable = share_nonrecycable_init + share_plastic_init * (1 - lca_share_io_overall)
 
     # recycling of metal materials
     # transport to recycling facility
@@ -703,38 +733,37 @@ if material_fraction_number == 1:
 elif material_fraction_number > 1 and material_fraction_number <= 5:
   
     # Store dataframes in list to use in loop
-    list_df_sort = [df_sort_ferromagnetic, df_sort_eddycurrent, df_sort_density, df_sort_electrostatic]
-    list_df_sort_name = ["sort_ferromagnetic", "sort_eddycurrent", "sort_density", "sort_electrostatic"]
-    list_sort_weight = [wt_ferromagnetic, wt_eddycurrent, wt_density, wt_electrostatic]
+    list_df_sort = [df_sort_ferromagnetic, df_sort_eddycurrent, df_sort_density, df_sort_electrostatic, df_sort_sensorbased]
+    list_sort_weight = [wt_ferromagnetic, wt_eddycurrent, wt_density, wt_electrostatic, wt_sensorbased]
 
     # Initialize dataframes for output scores (1. for sorting)
-    df_result_sorting = func_initializeOutputDf(material_fraction_number, material_type)
+    df_result_sorting = func_initializeOutputDf(amount = material_fraction_number, label_columns=columns_sorting)
 
     # loop through each sorting method and obtain values for all material pairing
     for k in range(len(list_df_sort)):
 
         # Obtain values from function
-        values_sort = func_checkSorting(material_fraction_number,list_df_sort[k])
+        values_sort = func_checkSorting(amount=material_fraction_number, df=list_df_sort[k])
 
         # Add values for each sorting method to result dataframe and change index names
-        df_result_sorting.loc[k] = values_sort
-    
-    # Change indexes of sorting method
-    df_result_sorting.index = list_df_sort_name
+        df_result_sorting[columns_sorting[k+1]] = values_sort
 
     # Check if one material can be sorted completly from any other (= 1, sortenrein)
     for k in range(material_fraction_number):
 
         # Get material string 
         material_name = material_type[k]
-        # Check which column contains material name
-        matching_col_indices = [i for i, col in enumerate(df_result_sorting.columns) if material_name in col]
-        # Check if all relevant columns for a material contain at least a 1
+
+        # Check which row contains material name
+        matching_row_indices = func_get_indices_for_material(df=df_result_sorting, column=label_material_pairing, material=material_name)
+        st.write(matching_row_indices)
+
+        # Check if all relevant rows for a material contain at least a 1
         value_to_find = 1
         list_check_clear_sort = []
 
-        for l in range(len(matching_col_indices)):
-            contains_value = value_to_find in df_result_sorting.iloc[:, matching_col_indices[l]].values
+        for l in range(len(matching_row_indices)):
+            contains_value = value_to_find in df_result_sorting.iloc[matching_row_indices[l], :].values
             list_check_clear_sort.append(contains_value)
 
         # if the material can be sorted from other materials: 
@@ -750,7 +779,7 @@ elif material_fraction_number > 1 and material_fraction_number <= 5:
                 # get material pairing which cannot be sorted completly (!=1)
                 if list_check_clear_sort[l] == False:
                     # extract values from dataframe column
-                    values_to_average = df_result_sorting.iloc[:, matching_col_indices[l]].tolist()
+                    values_to_average = df_result_sorting.iloc[:, matching_row_indices[l]].tolist()
                     # multiply each value with the corresponding weight
                     weighted_values_to_average = [a * b for a, b in zip(values_to_average, list_sort_weight)]
                     # calculate mean and store in result dataframe
@@ -758,6 +787,9 @@ elif material_fraction_number > 1 and material_fraction_number <= 5:
 
     wertstoffscore = 74 #Einteilung als Recyling, werkstofflich, gemischt
     ws_category, ws_sentence = func_evaluateWS(wertstoffscore)
+
+st.write(df_result_sorting)
+st.write(df_result)
 
 ## get location data from Recycler #TODO WeSort: Hier den Algorithmus zur Verknüpfung mit dem Recycler einfügen. 
 # Habe bereits die ermittelten Daten zu Längen- und Breitengrad des Abfallursprungs als list bereitgestellt. 
