@@ -4,7 +4,7 @@ import pandas as pd
 
 ## Define variables
 # Initialize variables
-wertstoffscore = 0 # variable for the final score of the waste material
+material_score = 0 # variable for the final score of the waste material
 percent_valuable_substance = 0.0 #set up variable for the amount of valuable substance in the waste
 material_type = [] # list of waste types added during the input
 material_share = [] # list of corresponding waste percentages added during the input
@@ -125,8 +125,8 @@ df_lca_emission_data = pd.read_excel(file_path_background, sheet_name = "lca_cal
 
 ## Define functions - general
 # Function to locate WS to a class
-def func_evaluateWS(wertstoffscore: float):
-    ws_rounded = round(wertstoffscore, 1)
+def func_evaluateWS(material_score: float):
+    ws_rounded = round(material_score, 1)
     step = 0.1
     if -10 <= ws_rounded < 0: #Klasse G: Sondermüll
       ws_category = "H"
@@ -260,6 +260,49 @@ def func_sum_columns_with_conditions(df, row_label, include_substring, exclude_s
         if include_substring in col and exclude_substring not in col
     ]
     return df.loc[row_label, filtered_columns].sum()
+
+# Calculate the weighted mean of the results from sorting
+def func_calculate_weighted_mean(df: pd.DataFrame, value_col: str, weight_col: str) -> float:
+    """
+    Calculates the weighted mean of a column in a DataFrame.
+
+    Parameters:
+        df (pd.DataFrame): The DataFrame containing the data.
+        value_col (str): The name of the column with the values to average.
+        weight_col (str): The name of the column with the weights.
+
+    Returns:
+        float: The weighted mean.
+    """
+    weighted_mean = (
+        (df[value_col] * df[weight_col]).sum() / df[weight_col].sum()
+    )
+    return weighted_mean
+
+# Map the weighted mean to a scale for mechanical recycling
+def func_map_to_scale(weighted_mean: float) -> float:
+    """
+    Maps a weighted mean value to a corresponding scale.
+
+    Parameters:
+        weighted_mean (float): The weighted mean value.
+
+    Returns:
+        float: The value mapped to the scale.
+    """
+    if weighted_mean == 1:
+        # If the value is exactly 1, return 82
+        return 82
+    elif weighted_mean < 1:
+        # Map the value evenly to the scale 60–74 for values < 1
+        # Linear interpolation formula:
+        # scaled_value = start_scale + (value / max_value) * (end_scale - start_scale)
+        start_scale = 60
+        end_scale = 74
+        scaled_value = start_scale + (weighted_mean / 1) * (end_scale - start_scale)
+        return scaled_value
+    else:
+        raise ValueError("The input value must be less than or equal to 1.")
 
 ## Define functions - LCA
 # Get a specific emission factor from background_data
@@ -699,8 +742,8 @@ def func_lca_compare_emissions(val_recycling: float, val_wte: float) -> tuple:
 # Step 1: Check hazourdous/non-hazourdous status via REACH-conformity
 # 1.1 If waste is not conform to REACH, categorize as "Sondermüll"
 if reach_conformity == "Nein":
-    wertstoffscore = -10.0
-    ws_category, ws_sentence = func_evaluateWS(wertstoffscore)
+    material_score = -10.0
+    ws_category, ws_sentence = func_evaluateWS(material_score)
    
 # Step 2: Check if fractions are for the most part potentially recycable
 # 2.1 Filter materials dataframe for recycling advancement
@@ -714,8 +757,8 @@ for k in range(material_fraction_number):
         percent_valuable_substance += material_share[k]/100
 
 if percent_valuable_substance < set_threshold_assessibility:
-    wertstoffscore = 0
-    ws_category, ws_sentence = func_evaluateWS(wertstoffscore)
+    material_score = 0
+    ws_category, ws_sentence = func_evaluateWS(material_score)
 
 # Step 3: Check if possible to sort fractions by different methods
 # Initialize dataframes for output scores (1. for sorting, 2. for final results)
@@ -723,8 +766,8 @@ df_result = func_initializeResultDf(amount=material_fraction_number, label_colum
 
 # if waste consists only of one fraction, no sorting is necessary
 if material_fraction_number == 1: 
-    wertstoffscore = 89 #Einteilung als Recyling, werkstofflich, sortenrein
-    ws_category, ws_sentence = func_evaluateWS(wertstoffscore)
+    material_score = 89 #Einteilung als Recyling, werkstofflich, sortenrein
+    ws_category, ws_sentence = func_evaluateWS(material_score)
 
     # result_sorting in Dataframe = 1
     df_result.at[0, label_material_result_sorting] = 1
@@ -757,7 +800,6 @@ elif material_fraction_number > 1 and material_fraction_number <= 5:
         # Check which row contains material name
         matching_row_indices = func_get_indices_for_material(df=df_result_sorting, column=label_material_pairing, material=material_name)
         st.write(matching_row_indices)
-
         # Check if all relevant rows for a material contain at least a 1
         value_to_find = 1
         list_check_clear_sort = []
@@ -765,7 +807,7 @@ elif material_fraction_number > 1 and material_fraction_number <= 5:
         for l in range(len(matching_row_indices)):
             contains_value = value_to_find in df_result_sorting.iloc[matching_row_indices[l], :].values
             list_check_clear_sort.append(contains_value)
-
+        st.write(list_check_clear_sort)
         # if the material can be sorted from other materials: 
         if all(list_check_clear_sort) == True:
             # res_sort = 1
@@ -779,14 +821,21 @@ elif material_fraction_number > 1 and material_fraction_number <= 5:
                 # get material pairing which cannot be sorted completly (!=1)
                 if list_check_clear_sort[l] == False:
                     # extract values from dataframe column
-                    values_to_average = df_result_sorting.iloc[:, matching_row_indices[l]].tolist()
+                    st.write(df_result_sorting)
+                    values_to_average = df_result_sorting.iloc[matching_row_indices[l],1:].tolist()
                     # multiply each value with the corresponding weight
                     weighted_values_to_average = [a * b for a, b in zip(values_to_average, list_sort_weight)]
                     # calculate mean and store in result dataframe
                     df_result.at[k, label_material_result_sorting] = sum(weighted_values_to_average) / len(weighted_values_to_average)
 
-    wertstoffscore = 74 #Einteilung als Recyling, werkstofflich, gemischt
-    ws_category, ws_sentence = func_evaluateWS(wertstoffscore)
+    # get the weighted mean of the material specific results of the sorting options
+    weighted_mean = func_calculate_weighted_mean(df=df_result, value_col=label_material_result_sorting, weight_col=label_material_share)
+
+    # get the preliminary material score 
+    material_score = func_map_to_scale(weighted_mean=weighted_mean)
+
+    # get the material score category and output sentence
+    ws_category, ws_sentence = func_evaluateWS(material_score)
 
 st.write(df_result_sorting)
 st.write(df_result)
@@ -829,7 +878,7 @@ col1, col2 = st.columns([1, 2])  # Adjust proportions to balance text and map
 
 # Left column: Score and recommendation
 with col1:
-    st.metric(label="WS", value=f"{wertstoffscore} %", help="Der Wertstoff-Score wurde auf Basis deiner Eingaben ermittelt. Er gibt an, welche Verwertungsmethode dafür geeignet erscheint.")
+    st.metric(label="WS", value=f"{material_score} %", help="Der Wertstoff-Score wurde auf Basis deiner Eingaben ermittelt. Er gibt an, welche Verwertungsmethode dafür geeignet erscheint.")
     st.write(f"Dein Wertstoff erreicht den Score {ws_category}. {ws_sentence}")
 
     # Recycler Recommendation
