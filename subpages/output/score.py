@@ -10,79 +10,6 @@ material_type = [] # list of waste types added during the input
 material_share = [] # list of corresponding waste percentages added during the input
 comparability_malus = 0 # initiate comparability malus
 
-# Parameters changing model
-set_threshold_assessibility = 0.8 # threshold for Step 2 regarding the assessibility of the recycling fraction
-wt_ferromagnetic = 1 # weigth of sorting method "ferromagnetic", between 0 and 1
-wt_eddycurrent = 1 # weigth of sorting method "eddycurrent", between 0 and 1
-wt_density = 1 # weigth of sorting method "density", between 0 and 1
-wt_electrostatic = 1 # weigth of sorting method "electrostatic", between 0 and 1
-wt_sensorbased = 1 # weigth of sorting method "sensorbased", between 0 and 1
-
-# Parameters for score evaluation
-# Define category boundaries as a list
-ws_boundary_min = -10
-ws_boundary_g_f = 0
-ws_boundary_f_e = 50
-ws_boundary_e_d = 60
-ws_boundary_d_c = 75
-ws_boundary_c_b = 90
-ws_boundary_b_a = 95
-ws_boundary_max = 100
-
-category_boundaries = [ws_boundary_min, ws_boundary_g_f, ws_boundary_f_e, ws_boundary_e_d, ws_boundary_d_c, ws_boundary_c_b, ws_boundary_b_a, ws_boundary_max]
-
-# Define comparability malus
-comparability_malus_min = 0
-comparability_malus_max = -6
-
-# define contamination malus
-contamination_malus_min = 0
-contamination_malus_max = -6
-
-# Default LCA data TODO change to dict
-lca_declared_unit = 1 # Declared unit, usually 1 kg
-lca_emission_origen = "DE"
-
-lca_substitution_factor_plastic = 0.5 # substitution factor for avoided emissions for plastics # TODO 
-lca_substitution_factor_metal = 0.8 # substitution factor for avoided emissions for metal # TODO 
-lca_substitution_factor_electricity = 1 # substitution factor for avoided emissions for electricity # TODO
-lca_substitution_factor_heat = 1 # substitution factor for avoided emissions for heat # TODO 
-
-lca_distance_to_wte = 10 # Distance to waste-to-energy-plant in km TODO
-lca_distance_to_landfill = 10 # Distance from wte-plant to landfill in km TODO
-lca_distance_to_recycling_metal = 10 # Distance from wte-plant to recycling facility for metal in km TODO
-
-lca_vehicle_to_wte = "transport_lkw_22" # Chosen vehicle to transport materials to wte
-lca_vehicle_to_landfill = "transport_lkw_22" # Chosen vehicle to transport materials to landfill
-lca_vehicle_to_recycler_metal = "transport_lkw_22" # Chosen vehicle to transport materials to recycler for metal
-lca_vehicle_to_recycler_plastic = "transport_lkw_22" # Chosen vehicle to transport materials to recycler for plastic
-
-lca_efficiency_wte_electric = 0.113
-lca_efficiency_wte_heat = 0.33
-lca_share_dross = 0.2 # TODO share of dross in ratio to 1 kg of burnable material (e.g. plastic)
-
-lca_electricity_use_sorting_metal = 0.3 # electricity use for sorting metal per kg, in kWh 
-lca_electricity_use_shredding_metal = 0.3 # electricity use for shredding metal per kg, in kWh TODO
-lca_electricity_use_cleaning_metal = 0.3 # electricity use for cleaning metal per kg, in kWh TODO
-lca_electricity_use_melting_metal = 1 # electricity use for melting metal per kg, in kWh TODO
-lca_heat_use_cleaning_metal = 1 # heat energy use for cleaning metal per kg, in kWh TODO
-lca_water_use_cleaning_metal = 1 # water use for cleaning metal per kg in kg Water TODO
-lca_wastewater_use_cleaning_metal = 1 # wastewater for cleaning metal per kg in kg wastewater TODO
-lca_solvent_use_cleaning_metal = 1 # solvent use for clening metal per kg in kg solvent TODO
-
-lca_electricity_use_sorting_mixed = 0.3 # electricity use for sorting mixed materials per kg in kWh TODO
-lca_electricity_use_shredding_plastic = 0.3 # electricity use for shredding plastic per kg in kWh TODO
-lca_electricity_use_cleaning_plastic = 0.3 # electricity use for cleaning plastic per kg in kWh TODO
-lca_heat_use_cleaning_plastic = 1 # heat energy use for cleaning metal per kg, in kWh TODO
-lca_water_use_cleaning_plastic = 1 # water use for cleaning metal per kg in kg Water TODO
-lca_wastewater_use_cleaning_plastic = 1 # wastewater for cleaning metal per kg in kg wastewater TODO
-lca_solvent_use_cleaning_plastic = 1 # solvent use for clening metal per kg in kg solvent TODO
-
-lca_share_io_shredding = 0.99 # share of i.O. material fit for recycling after the shredding process TODO
-lca_share_io_cleaning = 0.99 # share of i.O. material fit for recycling after the cleaning process TODO
-lca_share_io_regranulation = 0.99 # share of i.O. material fit for recycling after the regranulation process TODO
-lca_share_io_overall = lca_share_io_shredding * lca_share_io_cleaning * lca_share_io_regranulation # share of i.O. material fit for recycling overall
-
 # file paths
 file_path_background = "content/background_data_decision_tree.xlsx"
 file_path_input = "content/plastiq_input_information.xlsx"
@@ -101,10 +28,10 @@ def load_parameters_from_excel_to_dict(file_path: str, sheet_name: str) -> dict:
         dict: A dictionary with keys as parameter names and values as their corresponding values.
     """
     # Load Excel into a DataFrame
-    df = pd.read_excel(file_path, sheet_name, index_col=0)
+    df = pd.read_excel(file_path, sheet_name)
 
     # Convert DataFrame to dictionary
-    parameters_dict = pd.Series(df["value"].values, index=df["key"]).to_dict()
+    parameters_dict = pd.Series(df["value"].values, index=df["parameter"]).to_dict()
 
     return parameters_dict
 
@@ -118,7 +45,8 @@ def set_sort_parameters_from_dict(parameters: dict):
     """
     # Example of dynamically setting parameters
     global set_threshold_assessibility, wt_ferromagnetic, wt_eddycurrent, wt_density
-    global wt_electrostatic, wt_sensorbased, category_boundaries
+    global wt_electrostatic, wt_sensorbased, ws_boundary_min, ws_boundary_g_f, ws_boundary_f_e    
+    global ws_boundary_e_d, ws_boundary_d_c, ws_boundary_c_b, ws_boundary_b_a, ws_boundary_max, category_boundaries
     global comparability_malus_min, comparability_malus_max, contamination_malus_min, contamination_malus_max
     
     set_threshold_assessibility = parameters.get("set_threshold_assessibility")
@@ -128,15 +56,18 @@ def set_sort_parameters_from_dict(parameters: dict):
     wt_electrostatic = parameters.get("wt_electrostatic")
     wt_sensorbased = parameters.get("wt_sensorbased")
     
+    ws_boundary_min = parameters.get("ws_boundary_min")
+    ws_boundary_g_f = parameters.get("ws_boundary_g_f")
+    ws_boundary_f_e = parameters.get("ws_boundary_f_e")
+    ws_boundary_e_d = parameters.get("ws_boundary_e_d")
+    ws_boundary_d_c = parameters.get("ws_boundary_d_c")
+    ws_boundary_c_b = parameters.get("ws_boundary_c_b")
+    ws_boundary_b_a = parameters.get("ws_boundary_b_a")
+    ws_boundary_max = parameters.get("ws_boundary_max")
+
     category_boundaries = [
-        parameters.get("ws_boundary_min"),
-        parameters.get("ws_boundary_g_f"),
-        parameters.get("ws_boundary_f_e"),
-        parameters.get("ws_boundary_e_d"),
-        parameters.get("ws_boundary_d_c"),
-        parameters.get("ws_boundary_c_b"),
-        parameters.get("ws_boundary_b_a"),
-        parameters.get("ws_boundary_max"),
+        ws_boundary_min, ws_boundary_g_f, ws_boundary_f_e, ws_boundary_e_d,
+        ws_boundary_d_c, ws_boundary_c_b, ws_boundary_b_a, ws_boundary_max
     ]
     
     comparability_malus_min = parameters.get("comparability_malus_min")
@@ -148,7 +79,7 @@ def set_sort_parameters_from_dict(parameters: dict):
 sort_parameters_dict = load_parameters_from_excel_to_dict(file_path=file_path_background, sheet_name="sort_parameters")
 set_sort_parameters_from_dict(parameters=sort_parameters_dict)
 
-# extract lca parameters
+# function to set lca parameters
 def set_lca_parameters_from_dict(parameters: dict):
     """
     Extracts LCA parameters from a dictionary and sets them as variables.
@@ -206,9 +137,9 @@ def set_lca_parameters_from_dict(parameters: dict):
     lca_share_io_cleaning = parameters.get("lca_share_io_cleaning")
     lca_share_io_regranulation = parameters.get("lca_share_io_regranulation")
 
-# set sort parameters
-lca_parameters_dict = load_parameters_from_excel_to_dict(file_path=file_path_background, sheet_name="sort_parameters")
-set_sort_parameters_from_dict(parameters=lca_parameters_dict)
+# set lca parameters
+lca_parameters_dict = load_parameters_from_excel_to_dict(file_path=file_path_background, sheet_name="lca_parameters")
+set_lca_parameters_from_dict(parameters=lca_parameters_dict)
 
 # calculated lca parameters
 lca_share_io_overall = lca_share_io_shredding * lca_share_io_cleaning * lca_share_io_regranulation # share of i.O. material fit for recycling overall
@@ -1225,9 +1156,6 @@ contamination_malus = func_calculate_contamination_malus(material_contamination=
 # update material score
 material_score += (comparability_malus + contamination_malus)
 
-st.write(df_result)
-st.write(df_result_sorting)
-
 # get the material score category and output sentence
 ws_category, ws_sentence = func_evaluateWS(material_score)
 
@@ -1292,7 +1220,7 @@ col3, col4 = st.columns([3,1])
 with col3:
     st.header("Ökologisch")
     st.write(f"THG-Emission Recycling (erwartet): **{emission_recyling_per_weight.round(1)} t CO₂e/t**")
-    st.write(f"THG-Emission Entsorgung bisher (geschätzt): **{emission_wte_per_weight.round(1)} t CO₂e/t**")
+    st.write(f"THG-Emission Entsorgung bisher (geschätzt): **{round(emission_wte_per_weight,1)} t CO₂e/t**")
     st.write(f"Deine Wertstoffmenge: **{waste_weigth} t**")
     st.subheader(f"Einsparung: **{emission_comparison_per_weight.round(1)} t CO₂e**")
 
