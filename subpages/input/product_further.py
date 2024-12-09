@@ -84,14 +84,6 @@ def append_df_to_excel(file_path, df, sheet_name='product_amount', startrow=None
         with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
             df.to_excel(writer, sheet_name=sheet_name, index=False, **to_excel_kwargs)
 
-# Initialize keys for product input form if not available 
-if "key_dict_product_amount" not in st.session_state:
-    st.session_state.key_dict_product_amount = {"input_wertstoff_menge":0,
-                                                "input_haeufigkeit_menge":0,
-                                                "input_haeufigkeit_turnus":None,
-                                                "input_wertstoff_beschreibung":"",
-                                                }
-    
 # For loop: Create session state key for every key in key_dict_product
 for k in st.session_state.key_dict_product_amount:
     st.session_state[k] = st.session_state.key_dict_product_amount[k]
@@ -104,10 +96,10 @@ st.header("Menge und weitere Angaben", divider="red")
 product_df = collect_product_amount()
 
 # Display the dataframe if not None
-if product_df is not None:
+#if product_df is not None:
 
     # Append the DataFrame to the existing Excel file
-    append_df_to_excel(file_path, product_df)
+    #append_df_to_excel(file_path, product_df) #disabled the function to write in excel
     #show_dataframe (df_header, product_df)
 
 # Display buttons to switch between input pages
@@ -117,4 +109,5 @@ if button_back:
     st.switch_page("subpages/input/product_quality_additive.py")
 button_next = right_column_bottom.button("Eingabe abschließen")
 if button_next:
+    st.session_state.state_subpage_score = True
     st.switch_page("subpages/output/score.py")

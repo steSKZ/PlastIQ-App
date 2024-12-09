@@ -189,19 +189,6 @@ def append_df_to_excel(file_path, df, sheet_name='company_data', startrow=None, 
         with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
             df.to_excel(writer, sheet_name=sheet_name, index=False, **to_excel_kwargs)
 
-# Initialize keys for company input form if not available 
-if "key_dict_company" not in st.session_state:
-    st.session_state.key_dict_company = {"input_unternehmen":"",
-                                         "input_strasse":"",
-                                         "input_plz":"",
-                                         "input_stadt":"",
-                                         "input_bundesland":None,
-                                         "input_land":None,
-                                         "input_erzeuger":False,
-                                         "input_verwerter":False,
-                                         "input_leistungen":[]
-                                         }
-    
 # For loop: Create session state key for every key in key_dict_company
 for k in st.session_state.key_dict_company:
     st.session_state[k] = st.session_state.key_dict_company[k]
@@ -225,10 +212,10 @@ verwerter = right_column_top.checkbox(label="Recycler/Verwerter?", key="input_ve
 company_df = collect_company()
 
 # Display the dataframe if not None
-if company_df is not None:
+#if company_df is not None:
 
     # Append the DataFrame to the existing Excel file
-    append_df_to_excel(file_path, company_df)
+    #append_df_to_excel(file_path, company_df) #disabled the function to write in excel
     #show_dataframe (df_header, company_df)
 
 # Display buttons to switch between input pages

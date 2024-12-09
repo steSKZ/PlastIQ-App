@@ -82,15 +82,7 @@ def show_dataframe(df_header, contact_df):
     st.dataframe(contact_df)
     
 ## Excecution of streamlit page
-# Initialize keys for contact input form if not available 
-if "key_dict_contact" not in st.session_state:
-    st.session_state.key_dict_contact = {"input_nachname":"",
-                                         "input_vorname":"",
-                                         "input_unternehmen":"",
-                                         "input_position":"",
-                                         "input_mail":"",
-                                         "input_telefonnummer":"",
-                                         }
+
 # For loop: Create session state key for every key in key_dict_contact
 for k in st.session_state.key_dict_contact:
     st.session_state[k] = st.session_state.key_dict_contact[k]
@@ -102,10 +94,10 @@ st.title("Kontakt")
 contact_df = collect_contact()
 
 # Display and store the dataframe if not None
-if contact_df is not None:
+#if contact_df is not None:
     # Append the DataFrame to the existing Excel file
-    append_df_to_excel(file_path, contact_df)
-    #show_dataframe (df_header, contact_df)
+    #append_df_to_excel(file_path, contact_df)
+    #show_dataframe (df_header, contact_df) #disabled the function to write in excel
 
 # Display buttons to switch between input pages
 button_next = st.button("Weiter")

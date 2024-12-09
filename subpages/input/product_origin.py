@@ -106,10 +106,10 @@ wertstoff_herkunft = st.selectbox(label="Herkunftskategorie", options=wertstoff_
 product_df = collect_product_origin(wertstoff_herkunft)
 
 # Display the dataframe if not None
-if product_df is not None:
+#if product_df is not None:
 
     # Append the DataFrame to the existing Excel file
-    append_df_to_excel(file_path, product_df)
+    #append_df_to_excel(file_path, product_df) #disabled the function to write in excel
     #show_dataframe (df_header, product_df)
 
 # Display buttons to switch between input pages

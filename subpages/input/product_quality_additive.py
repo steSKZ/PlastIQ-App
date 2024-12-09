@@ -146,10 +146,10 @@ st.header("Additive und Füllstoffe", divider="red", help="Bitte gebe die Inform
 product_df = collect_additive_quality(list_wertstoff_name, list_additiv_typ, list_fuellstoff_typ)
 
 # Display the dataframe if not None
-if product_df is not None:
+#if product_df is not None:
 
     # Append the DataFrame to the existing Excel file
-    append_df_to_excel(file_path, product_df)
+    #append_df_to_excel(file_path, product_df) #disabled the function to write in excel
     #show_dataframe (df_header, product_df)
 
 # Display buttons to switch between input pages

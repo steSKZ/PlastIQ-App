@@ -10,7 +10,7 @@ page_input_pr_origin = st.Page("subpages/input/product_origin.py", title="Herkun
 page_input_pr_quality = st.Page("subpages/input/product_quality.py", title="Qualität – Wertstoff", icon=":material/add_circle:")
 page_input_pr_quality_additive = st.Page("subpages/input/product_quality_additive.py", title="Qualität – Zusätze", icon=":material/add_circle:")
 page_input_pr_further = st.Page("subpages/input/product_further.py", title="Weitere Angaben", icon=":material/add_circle:")
-page_output_score = st.Page("subpages/output/score.py", title="Passende Verwertung", icon=":material/all_match:")
+page_output_score = st.Page("subpages/output/score.py", title="Score und Matching", icon=":material/all_match:")
 
 
 pg = st.navigation(
@@ -20,6 +20,29 @@ pg = st.navigation(
         "Ergebnisse": [page_output_score],
     }
 )
+
+# Initialize keys for company input form if not available 
+if "key_dict_company" not in st.session_state:
+    st.session_state.key_dict_company = {"input_unternehmen":"",
+                                         "input_strasse":"",
+                                         "input_plz":"",
+                                         "input_stadt":"",
+                                         "input_bundesland":None,
+                                         "input_land":None,
+                                         "input_erzeuger":False,
+                                         "input_verwerter":False,
+                                         "input_leistungen":[]
+                                         }
+
+# Initialize keys for contact input form if not available 
+if "key_dict_contact" not in st.session_state:
+    st.session_state.key_dict_contact = {"input_nachname":"",
+                                         "input_vorname":"",
+                                         "input_unternehmen":"",
+                                         "input_position":"",
+                                         "input_mail":"",
+                                         "input_telefonnummer":"",
+                                         }
 
 # Initialize keys for product input form if not available 
 if "key_dict_product" not in st.session_state:
@@ -31,7 +54,7 @@ if "key_dict_product" not in st.session_state:
         st.session_state.key_dict_product[f"input_wertstoff_anteil_{i}"] = 0.00
     
 
-# Initialize keys for product input form if not available 
+# Initialize keys for product origin input form if not available 
 if "key_dict_product_origin" not in st.session_state:
     st.session_state.key_dict_product_origin = {"input_wertstoff_origin":None,
                                                 "input_wertstoff_use":"",
@@ -39,7 +62,7 @@ if "key_dict_product_origin" not in st.session_state:
                                                 "input_wertstoff_code":"",
                                                 }
     
-# Initialize keys for product input form if not available 
+# Initialize keys for product quality input form if not available 
 if "key_dict_product_quality" not in st.session_state:
     st.session_state.key_dict_product_quality = {"input_wertstoff_reach":None,
                                                 "input_wertstoff_colour":None,
@@ -52,4 +75,12 @@ if "key_dict_product_quality" not in st.session_state:
         st.session_state.key_dict_product_quality[f"input_additiv_typ_{i}"] = []
         st.session_state.key_dict_product_quality[f"input_fuellstoff_typ_{i}"] = []
 
+# Initialize keys for product input form if not available 
+if "key_dict_product_amount" not in st.session_state:
+    st.session_state.key_dict_product_amount = {"input_wertstoff_menge":0,
+                                                "input_haeufigkeit_menge":0,
+                                                "input_haeufigkeit_turnus":None,
+                                                "input_wertstoff_beschreibung":"",
+                                                "state_subpage_score": False}
+    
 pg.run()

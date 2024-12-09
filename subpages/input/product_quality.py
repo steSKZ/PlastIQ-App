@@ -130,11 +130,11 @@ st.header("Qualität des Wertstoffs", divider="red", help="Bitte gebe die Inform
 product_df = collect_product_quality(value_fraction, value_origin)
 
 # Display the dataframe if not None
-if product_df is not None:
+#if product_df is not None:
 
     # Append the DataFrame to the existing Excel file
-    append_df_to_excel(file_path, product_df)
-    #show_dataframe (df_header, product_df)
+    #append_df_to_excel(file_path, product_df)
+    #show_dataframe (df_header, product_df) #disabled the function to write in excel
 
 # Display buttons to switch between input pages
 left_column_bottom, right_column_bottom = st.columns([.13,1])
