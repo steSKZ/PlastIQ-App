@@ -8,6 +8,7 @@ material_score = 0 # variable for the final score of the waste material
 percent_valuable_substance = 0.0 #set up variable for the amount of valuable substance in the waste
 material_type = [] # list of waste types added during the input
 material_share = [] # list of corresponding waste percentages added during the input
+comparability_malus = 0 # initiate comparability malus
 
 # Parameters changing model
 set_threshold_assessibility = 0.8 # threshold for Step 2 regarding the assessibility of the recycling fraction
@@ -71,7 +72,8 @@ label_material_type = "type"
 label_material_category = "category"
 label_material_share = "share"
 label_material_result_sorting = "result_sorting"
-columns_materials = [label_material_type, label_material_category, label_material_share, label_material_result_sorting]
+label_material_result_compatibility = "result_compatibility"
+columns_materials = [label_material_type, label_material_category, label_material_share, label_material_result_sorting, label_material_result_compatibility]
 
 # for dataframe of sorting results:
 label_material_pairing = "material_pairing"
@@ -80,7 +82,8 @@ label_sort_eddycurrent = "sort_eddycurrent"
 label_sort_density = "sort_density"
 label_sort_electrostatic = "sort_electrostatic"
 label_sort_sensorbased = "sort_sensorbased"
-columns_sorting = [label_material_pairing, label_sort_ferromagnetic, label_sort_eddycurrent, label_sort_density, label_sort_electrostatic, label_sort_sensorbased]
+label_sort_compatibility = "sort_compatibility"
+columns_sorting = [label_material_pairing, label_sort_ferromagnetic, label_sort_eddycurrent, label_sort_density, label_sort_electrostatic, label_sort_sensorbased, label_sort_compatibility]
 
 # for dataframe emissions
 columns_emissions = [
@@ -106,6 +109,8 @@ material_fraction_number = st.session_state.key_dict_product["input_waste_fracti
 for k in range(material_fraction_number):
     material_type.append(st.session_state.key_dict_product[f"input_wertstoff_typ_{k}"])
     material_share.append(st.session_state.key_dict_product[f"input_wertstoff_anteil_{k}"])
+# get material contamination
+material_contamination = st.session_state.key_dict_product_quality["input_wertstoff_contaminants_level"]
 
 ## Get input data from files
 # Get list with all available materials and data on them
@@ -120,6 +125,8 @@ df_sort_density = pd.read_excel(file_path_background, sheet_name = "sort_density
 df_sort_electrostatic = pd.read_excel(file_path_background, sheet_name = "sort_electrostatic", index_col=0)
 # Sensorbased Sorting 
 df_sort_sensorbased = pd.read_excel(file_path_background, sheet_name = "sort_sensorbased", index_col=0)
+# Material compatibility
+df_sort_compatibility = pd.read_excel(file_path_background, sheet_name = "sort_compatibility", index_col=0)
 # Get emission data
 df_lca_emission_data = pd.read_excel(file_path_background, sheet_name = "lca_calculation")
 
@@ -279,30 +286,96 @@ def func_calculate_weighted_mean(df: pd.DataFrame, value_col: str, weight_col: s
     )
     return weighted_mean
 
-# Map the weighted mean to a scale for mechanical recycling
-def func_map_to_scale(weighted_mean: float) -> float:
+# Map the weighted mean to a scale
+def func_map_to_scale(value: float, return_if_1: float, start_scale: float, end_scale: float) -> float:
     """
-    Maps a weighted mean value to a corresponding scale.
+    Maps a given value to a corresponding scale with configurable parameters.
 
     Parameters:
-        weighted_mean (float): The weighted mean value.
+        value (float): The input value to be mapped.
+        return_if_1 (float): The scale value to return if the input value is exactly 1.
+        start_scale (float): The starting value of the scale for input values < 1.
+        end_scale (float): The ending value of the scale for input values < 1.
 
     Returns:
         float: The value mapped to the scale.
+
+    Raises:
+        ValueError: If the input value is greater than 1.
     """
-    if weighted_mean == 1:
-        # If the value is exactly 1, return 82
-        return 82
-    elif weighted_mean < 1:
-        # Map the value evenly to the scale 60–74 for values < 1
-        # Linear interpolation formula:
-        # scaled_value = start_scale + (value / max_value) * (end_scale - start_scale)
-        start_scale = 60
-        end_scale = 74
-        scaled_value = start_scale + (weighted_mean / 1) * (end_scale - start_scale)
+    if value == 1:
+        # If the value is exactly 1, return the specified return_if_1 value
+        return return_if_1
+    elif value < 1:
+        # Map the value evenly to the specified scale for values < 1
+        scaled_value = start_scale + (value / 1) * (end_scale - start_scale)
         return scaled_value
     else:
         raise ValueError("The input value must be less than or equal to 1.")
+
+# calculate mean of certain values for a list of materials
+def func_calculate_mean_for_materials(df: pd.DataFrame, materials: list, material_col: str, value_col: str) -> list:
+    """
+    Calculates the mean of values in a column for rows containing a specific material in the another column.
+
+    Parameters:
+        df (pd.DataFrame): The input DataFrame.
+        materials (list): A list of material names to search for in the column.
+        material_col (str): The name of the column containing material types.
+        value_col (str): The name of the column containing the values to average.
+
+    Returns:
+        list: A list of mean values corresponding to each material in the input list.
+    """
+    mean_values = []
+
+    for material in materials:
+        # Filter rows containing the material in the specified column
+        filtered_rows = df[df[material_col].str.contains(material, case=False, na=False)]
+
+        # Calculate the mean of the specified column for the filtered rows
+        mean_value = filtered_rows[value_col].mean()
+
+        # Append the mean value to the result list
+        mean_values.append(mean_value)
+
+    return mean_values
+
+# calculate cases for contamination malus
+def func_calculate_contamination_malus(material_contamination: str, scale_contamination_malus_min: float, scale_contamination_malus_max: float) -> float:
+    """
+    Calculates the malus value for a material contamination level based on a specified scale.
+
+    Parameters:
+        material_contamination (str): The level of contamination.
+                                       Expected values: "keine", "gering", "mittel", "hoch", "sehr hoch".
+        scale_contamination_malus_min (float): The minimum malus value (for "keine").
+        scale_contamination_malus_max (float): The maximum malus value (for "sehr hoch").
+
+    Returns:
+        float: The malus value corresponding to the contamination level.
+
+    Raises:
+        ValueError: If the input does not match any expected contamination levels.
+    """
+    # Define contamination levels in order of severity
+    contamination_levels = ["keine", "gering", "mittel", "hoch", "sehr hoch"]
+
+    # Check if the input is valid
+    if material_contamination not in contamination_levels:
+        raise ValueError(f"Ungültiger Kontaminationswert: {material_contamination}. Erlaubte Werte: {contamination_levels}")
+
+    # Calculate the step size
+    num_levels = len(contamination_levels)
+    step_size = (scale_contamination_malus_max - scale_contamination_malus_min) / (num_levels - 1)
+
+    # Find the index of the contamination level
+    level_index = contamination_levels.index(material_contamination)
+
+    # Calculate the malus value
+    malus_value = scale_contamination_malus_min + level_index * step_size
+
+    return malus_value
 
 ## Define functions - LCA
 # Get a specific emission factor from background_data
@@ -652,8 +725,8 @@ def func_lca_emissions_scenario_recycling(df: pd.DataFrame, df_emission: pd.Data
     share_plastic *= lca_share_io_cleaning
     
     # depending on plastic type
-    df_emission.at[new_index, "processing_plastic_drying"] = share_plastic * func_lca_emissions_processes_plastic(process="drying", df=df_result)
-    df_emission.at[new_index, "processing_plastic_regranulation"] = share_plastic * func_lca_emissions_processes_plastic(process="regranulation", df=df_result)
+    df_emission.at[new_index, "processing_plastic_drying"] = share_plastic * func_lca_emissions_processes_plastic(process="drying", df=df)
+    df_emission.at[new_index, "processing_plastic_regranulation"] = share_plastic * func_lca_emissions_processes_plastic(process="regranulation", df=df)
     share_plastic *= lca_share_io_regranulation
     share_nonrecycable = share_nonrecycable_init + share_plastic_init * (1 - lca_share_io_overall)
 
@@ -680,8 +753,8 @@ def func_lca_emissions_scenario_recycling(df: pd.DataFrame, df_emission: pd.Data
     df_emission.at[new_index, "transport_wte"] = share_nonrecycable * func_lca_emissions_transport(lca_vehicle_to_wte, lca_distance_to_wte, lca_declared_unit)
 
     # incineration of waste in waste-to-energy(wte)-plant
-    df_emission.at[new_index, "endoflife_incineration"] = share_nonrecycable * func_lca_emissions_incineration(df_result, lca_declared_unit)
-    energy_incineration = [x * share_nonrecycable for x in func_lca_energy_incineration(df_result, lca_declared_unit)]
+    df_emission.at[new_index, "endoflife_incineration"] = share_nonrecycable * func_lca_emissions_incineration(df, lca_declared_unit)
+    energy_incineration = [x * share_nonrecycable for x in func_lca_energy_incineration(df, lca_declared_unit)]
     share_dross = lca_share_dross * share_nonrecycable # share for the remaining dross compared to 1 kg waste
 
     # transport of dross to landfill + enmissions from landfill
@@ -691,8 +764,8 @@ def func_lca_emissions_scenario_recycling(df: pd.DataFrame, df_emission: pd.Data
     # advantage due to secondary materials and energy generation
     df_emission.at[new_index, "avoided_electricity"] = lca_substitution_factor_electricity * -func_lca_emissions_process(category="electricity", amount=energy_incineration[0], origen=lca_emission_origen, source="mix")
     df_emission.at[new_index, "avoided_heat"] = lca_substitution_factor_heat * -func_lca_emissions_process(category="heat", amount=energy_incineration[1], origen=lca_emission_origen, source="mix")
-    df_emission.at[new_index, "avoided_plastic"]  = lca_substitution_factor_plastic * -func_lca_emissions_avoided_material(df=df_result, relevant_category="plastic")
-    df_emission.at[new_index, "avoided_metal"]  = lca_substitution_factor_metal * -func_lca_emissions_avoided_material(df=df_result, relevant_category="metal")
+    df_emission.at[new_index, "avoided_plastic"]  = lca_substitution_factor_plastic * -func_lca_emissions_avoided_material(df=df, relevant_category="plastic")
+    df_emission.at[new_index, "avoided_metal"]  = lca_substitution_factor_metal * -func_lca_emissions_avoided_material(df=df, relevant_category="metal")
 
     # Group emissions by category
     df_emission.at[new_index, "processing_plastic_total"] = func_sum_columns_with_conditions(df=df_emission, row_label=new_index , include_substring="processing_plastic", exclude_substring="total")
@@ -743,7 +816,6 @@ def func_lca_compare_emissions(val_recycling: float, val_wte: float) -> tuple:
 # 1.1 If waste is not conform to REACH, categorize as "Sondermüll"
 if reach_conformity == "Nein":
     material_score = -10.0
-    ws_category, ws_sentence = func_evaluateWS(material_score)
    
 # Step 2: Check if fractions are for the most part potentially recycable
 # 2.1 Filter materials dataframe for recycling advancement
@@ -758,7 +830,6 @@ for k in range(material_fraction_number):
 
 if percent_valuable_substance < set_threshold_assessibility:
     material_score = 0
-    ws_category, ws_sentence = func_evaluateWS(material_score)
 
 # Step 3: Check if possible to sort fractions by different methods
 # Initialize dataframes for output scores (1. for sorting, 2. for final results)
@@ -767,7 +838,6 @@ df_result = func_initializeResultDf(amount=material_fraction_number, label_colum
 # if waste consists only of one fraction, no sorting is necessary
 if material_fraction_number == 1: 
     material_score = 89 #Einteilung als Recyling, werkstofflich, sortenrein
-    ws_category, ws_sentence = func_evaluateWS(material_score)
 
     # result_sorting in Dataframe = 1
     df_result.at[0, label_material_result_sorting] = 1
@@ -785,11 +855,8 @@ elif material_fraction_number > 1 and material_fraction_number <= 5:
     # loop through each sorting method and obtain values for all material pairing
     for k in range(len(list_df_sort)):
 
-        # Obtain values from function
-        values_sort = func_checkSorting(amount=material_fraction_number, df=list_df_sort[k])
-
-        # Add values for each sorting method to result dataframe and change index names
-        df_result_sorting[columns_sorting[k+1]] = values_sort
+        # Obtain values from function and add to dataframe
+        df_result_sorting[columns_sorting[k+1]] = func_checkSorting(amount=material_fraction_number, df=list_df_sort[k])
 
     # Check if one material can be sorted completly from any other (= 1, sortenrein)
     for k in range(material_fraction_number):
@@ -799,7 +866,7 @@ elif material_fraction_number > 1 and material_fraction_number <= 5:
 
         # Check which row contains material name
         matching_row_indices = func_get_indices_for_material(df=df_result_sorting, column=label_material_pairing, material=material_name)
-        st.write(matching_row_indices)
+       
         # Check if all relevant rows for a material contain at least a 1
         value_to_find = 1
         list_check_clear_sort = []
@@ -807,7 +874,7 @@ elif material_fraction_number > 1 and material_fraction_number <= 5:
         for l in range(len(matching_row_indices)):
             contains_value = value_to_find in df_result_sorting.iloc[matching_row_indices[l], :].values
             list_check_clear_sort.append(contains_value)
-        st.write(list_check_clear_sort)
+
         # if the material can be sorted from other materials: 
         if all(list_check_clear_sort) == True:
             # res_sort = 1
@@ -821,7 +888,7 @@ elif material_fraction_number > 1 and material_fraction_number <= 5:
                 # get material pairing which cannot be sorted completly (!=1)
                 if list_check_clear_sort[l] == False:
                     # extract values from dataframe column
-                    st.write(df_result_sorting)
+
                     values_to_average = df_result_sorting.iloc[matching_row_indices[l],1:].tolist()
                     # multiply each value with the corresponding weight
                     weighted_values_to_average = [a * b for a, b in zip(values_to_average, list_sort_weight)]
@@ -832,13 +899,29 @@ elif material_fraction_number > 1 and material_fraction_number <= 5:
     weighted_mean = func_calculate_weighted_mean(df=df_result, value_col=label_material_result_sorting, weight_col=label_material_share)
 
     # get the preliminary material score 
-    material_score = func_map_to_scale(weighted_mean=weighted_mean)
+    material_score = func_map_to_scale(value=weighted_mean, return_if_1=82, start_scale=60, end_scale=74)
+    
+    # consider compatibility and give mali, if not compatible
+    # Obtain values from function and add to result dataframe for sorting
+    df_result_sorting[label_sort_compatibility] = func_checkSorting(amount=material_fraction_number, df=df_sort_compatibility)
 
-    # get the material score category and output sentence
-    ws_category, ws_sentence = func_evaluateWS(material_score)
+    # for each material: calculate the mean value for comparability from pairings containing the material
+    df_result[label_material_result_compatibility] = func_calculate_mean_for_materials(df=df_result_sorting, materials=material_type, material_col=label_material_pairing, value_col=label_sort_compatibility)
 
-st.write(df_result_sorting)
-st.write(df_result)
+    # calculate the total mean value for comparability from the values of each material weighted with the material share
+    comparability_total = func_calculate_weighted_mean(df=df_result, value_col=label_material_result_compatibility, weight_col=label_material_share) 
+
+    # map total comparability to scale to determine the malus given
+    comparability_malus = func_map_to_scale(value=comparability_total, return_if_1=0, start_scale=-6, end_scale=0)
+
+# consider contamination and give malus, if materials are contaminated
+contamination_malus = func_calculate_contamination_malus(material_contamination=material_contamination, scale_contamination_malus_min=0, scale_contamination_malus_max=-6)
+
+# update material score
+material_score += (comparability_malus + contamination_malus)
+
+# get the material score category and output sentence
+ws_category, ws_sentence = func_evaluateWS(material_score)
 
 ## get location data from Recycler #TODO WeSort: Hier den Algorithmus zur Verknüpfung mit dem Recycler einfügen. 
 # Habe bereits die ermittelten Daten zu Längen- und Breitengrad des Abfallursprungs als list bereitgestellt. 
@@ -852,7 +935,6 @@ contact_recycler_phone = "+49 3471 64040" # TODO WeSort: Hier Beispiel austausch
 contact_recycler_mail = "de-ves-multiport-bernburg@veolia.com" # TODO WeSort: Hier Beispiel austauschen mit gewähltem Recycler
 
 ## life cycle analysis (lca) and comparison of current and proposed waste treatment
-
 # Initialize dataframe for calculated emissions
 df_emission = pd.DataFrame(columns = columns_emissions)
 
